@@ -349,4 +349,4 @@ def background_clock_sync():
 if __name__ == '__main__':
     socketio.start_background_task(background_clock_sync)
     print(f"🚀 FocusFlow Multi-User Backend running on http://127.0.0.1:8080")
-    socketio.run(app, host='0.0.0.0', port=8080, debug=False)
+    socketio.run(app, host='0.0.0.0', port=8080, debug=False, allow_unsafe_werkzeug=True)
