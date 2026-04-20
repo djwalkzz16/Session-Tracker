@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Clock | AMOLED</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            background-color: #000000;
+            color: #ffffff;
+            font-family: 'Fira Code', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        
+        .session-info {
+            position: absolute;
+            top: 24px;
+            left: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .session-name {
+            font-size: 1.5rem;
+            color: #888888;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .session-goal {
+            font-size: 1rem;
+            color: #444444;
+            transition: color 0.5s ease, text-shadow 0.5s ease;
+        }
+
+        .goal-reached {
+            color: #00e676 !important;
+            text-shadow: 0 0 10px rgba(0, 230, 118, 0.2);
+        }
+
+        .current-time {
+            position: absolute;
+            top: 24px;
+            right: 32px;
+            font-size: 1.5rem;
+            color: #666666;
+            font-weight: 500;
+        }
+        
+        .stopwatch {
+            font-size: 12vw;
+            font-weight: 700;
+            text-align: center;
+            color: #f0f0f0;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -2px;
+        }
+        
+        .fullscreen-btn {
+            position: absolute;
+            bottom: 24px;
+            right: 32px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            outline: none;
+            padding: 10px;
+        }
+        
+        .fullscreen-btn i {
+            font-size: 1.8rem;
+            color: #444444;
+            transition: color 0.3s ease;
+        }
+        
+        .fullscreen-btn:hover i {
+            color: #ffffff;
+        }
+
+        .ms {
+            font-size: 6vw;
+            color: #aaaaaa;
+        }
+
+        /* Connecting overlay */
+        #connectOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 100;
+        }
+        #connectOverlay input {
+            padding: 15px; font-size: 1.5rem; font-family: 'Fira Code';
+            background: #111; color: white; border: 2px solid #333;
+            border-radius: 10px; margin-bottom: 20px; text-align: center;
+        }
+        #connectOverlay button {
+            padding: 15px 30px; font-size: 1.2rem; font-family: 'Fira Code';
+            background: #ffffff; color: black; border: none; font-weight: bold;
+            border-radius: 10px; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="connectOverlay">
+        <h2 style="color: #555;">Pair to User</h2>
+        <input type="text" id="remoteUserInput" placeholder="Enter Username">
+        <button onclick="connectRemote()">Connect</button>
+    </div>
+
+    <!-- Session Details -->
+    <div class="session-info" id="sessionInfo">
+        <span class="session-name" id="sessionName">Ready</span>
+        <span class="session-goal" id="sessionGoal">Awaiting Session...</span>
+    </div>
+
+    <div class="current-time" id="currentTime">00:00:00</div>
+    
+    <!-- Stopwatch Display -->
+    <div class="stopwatch" id="stopwatch">
+        <span id="sw-main">00:00:00</span><span class="ms">.00</span>
+    </div>
+
+    <!-- Fullscreen Toggle -->
+    <button class="fullscreen-btn" id="fsBtn" onclick="toggleFullScreen()" title="Toggle Fullscreen">
+        <i class="fa-solid fa-expand" id="fsIcon"></i>
+    </button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script>
+        var socket = io();
+        
+        // Extract user from URL (e.g. ?user=john)
+        const urlParams = new URLSearchParams(window.location.search);
+        let remoteUser = urlParams.get('user');
+
+        if (remoteUser) {
+            document.getElementById('connectOverlay').style.display = 'none';
+            socket.emit("join", { user_id: remoteUser.toLowerCase() });
+        }
+
+        function connectRemote() {
+            const val = document.getElementById('remoteUserInput').value.trim().toLowerCase();
+            if (val) {
+                window.location.search = '?user=' + val;
+            }
+        }
+
+        function updateCurrentTime() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('currentTime').textContent = `${hours}:${minutes}:${seconds}`;
+        }
+        setInterval(updateCurrentTime, 1000);
+        updateCurrentTime();
+
+        let stopwatchInterval;
+        let stopwatchTime = 0; 
+        let localStartTime = 0; 
+        let goalMs = null; 
+
+        function formatStopwatch(ms) {
+            const milliseconds = String(Math.floor(ms / 10) % 100).padStart(2, '0');
+            const seconds = String(Math.floor(ms / 1000) % 60).padStart(2, '0');
+            const minutes = String(Math.floor(ms / 60000) % 60).padStart(2, '0');
+            const hours = String(Math.floor(ms / 3600000)).padStart(2, '0');
+            
+            document.getElementById('sw-main').textContent = `${hours}:${minutes}:${seconds}`;
+            document.querySelector('.ms').textContent = `.${milliseconds}`;
+        }
+
+        function checkGoal(ms) {
+            const goalEl = document.getElementById('sessionGoal');
+            if (goalMs && ms >= goalMs) {
+                goalEl.classList.add('goal-reached');
+            } else {
+                goalEl.classList.remove('goal-reached');
+            }
+        }
+
+        function updateStopwatch() {
+            stopwatchTime = Date.now() - localStartTime;
+            formatStopwatch(stopwatchTime);
+            checkGoal(stopwatchTime);
+        }
+        
+        socket.on('start_sw', (data) => {
+            const goalEl = document.getElementById('sessionGoal');
+            goalEl.classList.remove('goal-reached'); 
+            
+            if (data && data.type) {
+                document.getElementById('sessionName').textContent = data.type;
+                goalEl.textContent = data.goal ? `Goal: ${data.goal}m` : '';
+                
+                if (data.goal && !isNaN(data.goal)) {
+                    goalMs = parseInt(data.goal, 10) * 60000;
+                } else {
+                    goalMs = null;
+                }
+            } else {
+                document.getElementById('sessionName').textContent = 'Active Session';
+                goalEl.textContent = '';
+                goalMs = null;
+            }
+
+            if (!stopwatchInterval) {
+                localStartTime = Date.now() - stopwatchTime;
+                stopwatchInterval = setInterval(updateStopwatch, 10);
+            }
+        });
+
+        socket.on('stop_sw', () => {
+            if (stopwatchInterval) {
+                clearInterval(stopwatchInterval);
+                stopwatchInterval = null;
+            }
+            if (document.getElementById('sessionName').textContent !== 'Ready') {
+                const goalEl = document.getElementById('sessionGoal');
+                if (!goalEl.classList.contains('goal-reached')) {
+                    goalEl.textContent = 'Paused';
+                }
+            }
+        });
+
+        socket.on('reset_sw', () => {
+            document.getElementById('sessionName').textContent = 'Ready';
+            const goalEl = document.getElementById('sessionGoal');
+            goalEl.textContent = 'Awaiting Session...';
+            goalEl.classList.remove('goal-reached');
+            goalMs = null;
+        });
+
+        socket.on("sw_time", (time) => {
+            stopwatchTime = time["elapsed_time"];
+            if (stopwatchInterval) {
+                localStartTime = Date.now() - stopwatchTime;
+            }
+            formatStopwatch(stopwatchTime);
+            checkGoal(stopwatchTime);
+        });
+
+        function toggleFullScreen() {
+            const fsIcon = document.getElementById("fsIcon");
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.error(`Error attempting to enable fullscreen: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+          
+        document.addEventListener('fullscreenchange', () => {
+            const fsIcon = document.getElementById("fsIcon");
+            const fsBtn = document.getElementById("fsBtn");
+            if (!document.fullscreenElement) {
+                fsIcon.classList.remove("fa-compress");
+                fsIcon.classList.add("fa-expand");
+                fsBtn.style.display = "block";
+            } else {
+                fsIcon.classList.remove("fa-expand");
+                fsIcon.classList.add("fa-compress");
+                fsBtn.style.display = "none";
+            }
+        });
+    </script>
+</body>
+</html>
