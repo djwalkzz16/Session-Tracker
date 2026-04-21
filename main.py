@@ -13,9 +13,25 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 DB_FILE = 'focus_data.json'
 USER_FILE = 'users.json'
 
+# --- Safe User DB Loading ---
+def load_users():
+    """Safely loads users.json or creates it if it doesn't exist."""
+    if not os.path.exists(USER_FILE):
+        with open(USER_FILE, 'w') as f:
+            json.dump({}, f)
+        return {}
+    try:
+        with open(USER_FILE, 'r') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_users(users_dict):
+    with open(USER_FILE, 'w') as f:
+        json.dump(users_dict, f, indent=4)
+
 # --- Database / State Management ---
 def load_state():
-    """Load state from the JSON file. It now holds a dictionary of users."""
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, 'r') as f:
@@ -33,18 +49,17 @@ def load_state():
     return {}
 
 def save_state():
-    """Save the multi-user state to the JSON file."""
     try:
         with open(DB_FILE, 'w') as f:
             json.dump(state, f, indent=4)
     except Exception as e:
         print(f"Error saving to database: {e}")
 
-# Initialize global multi-user state
+# Initialize global states
 state = load_state()
+load_users() # Ensure users file exists on startup
 
 def init_user(user_id):
-    """Ensure a user exists in the state dictionary."""
     if user_id not in state:
         state[user_id] = {
             'accumulated_time_ms': 0,
@@ -61,7 +76,6 @@ def init_user(user_id):
         save_state()
 
 def check_new_day(user_id):
-    """Check if the date has changed for a specific user."""
     init_user(user_id)
     today = datetime.now().strftime('%Y-%m-%d')
     if state[user_id].get('current_date') != today:
@@ -105,7 +119,6 @@ def calculate_stats(user_id):
         t = session['type']
         d_ms = session['duration_ms']
         
-        # Aggregate Weekly
         if session_date >= seven_days_ago:
             weekly_ms += d_ms
             if t not in weekly_breakdown:
@@ -113,7 +126,6 @@ def calculate_stats(user_id):
             weekly_breakdown[t]['count'] += 1
             weekly_breakdown[t]['total_ms'] += d_ms
             
-        # Aggregate Daily
         if session_date_str == today_str:
             daily_ms += d_ms
             if t not in daily_breakdown:
@@ -135,7 +147,6 @@ def calculate_stats(user_id):
     }
 
 def get_leaderboard():
-    """Generates the Daily Leaderboard for all active users."""
     today_str = datetime.now().strftime('%Y-%m-%d')
     leaderboard = []
     
@@ -145,21 +156,23 @@ def get_leaderboard():
             if session.get('date', today_str) == today_str:
                 daily_ms += session.get('duration_ms', 0)
                 
-        if daily_ms > 0:
+        is_running = u_state.get('is_running', False)
+        
+        if daily_ms > 0 or is_running:
             leaderboard.append({
                 'username': user_id,
                 'total_ms': daily_ms,
-                'formatted_time': format_time(daily_ms)
+                'formatted_time': format_time(daily_ms),
+                'is_running': is_running,
+                'current_session': u_state.get('current_session', {}).get('type', '') if is_running else ''
             })
             
-    # Sort descending by total time
     leaderboard.sort(key=lambda x: x['total_ms'], reverse=True)
     
-    # Assign ranks
     for i, entry in enumerate(leaderboard):
         entry['rank'] = i + 1
         
-    return leaderboard[:10] # Return Top 10
+    return leaderboard[:10]
 
 # --- Flask Routes ---
 @app.route('/')
@@ -174,47 +187,36 @@ def remote():
 def login():
     data = request.get_json()
     username = data.get('username')
-    password = data.get('password')  # For future use, currently not implemented
-    if not username:
-        return {"success": False, "message": "Username is required."}, 400
+    password = data.get('password')
     
-    if not password:
-        return {"success": False, "message": "Password is required."}, 400
+    if not username: return {"success": False, "message": "Username is required."}, 400
+    if not password: return {"success": False, "message": "Password is required."}, 400
 
-
-    with open(USER_FILE, 'r') as f:
-        users = json.load(f)
+    users = load_users()
     if username not in users:
         return {"success": False, "message": "Username not found. Please register first."}, 400
+    
+    if password == users[username]:
+        init_user(username)
+        return {"success": True, "message": f"User '{username}' logged in successfully.", "username": username}
     else:
-        if password == users[username]:
-            init_user(username)
-            return {"success": True, "message": f"User '{username}' logged in successfully.", "username": username}
-        else:
-            return {"success": False, "message": "Invalid password."}, 400
+        return {"success": False, "message": "Invalid password."}, 400
 
 @app.route("/register", methods=['POST'])
 def register():
     data = request.get_json()
     username = data.get('username')
-    password = data.get('password')  # For future use, currently not implemented
+    password = data.get('password')
 
-    if not username:
-        return {"success": False, "message": "Username is required."}, 400
+    if not username: return {"success": False, "message": "Username is required."}, 400
+    if not password: return {"success": False, "message": "Password is required."}, 400
 
-    if not password:
-        return {"success": False, "message": "Password is required."}, 400
-
-    if username in state:
+    users = load_users()
+    if username in users or username in state:
         return {"success": False, "message": "Username already exists. Please choose another."}, 400
 
-    # Save the new user (in a real application, you would hash the password)
-    with open(USER_FILE, 'r') as f:
-        users = json.load(f)
     users[username] = password
-    with open(USER_FILE, 'w') as f:
-        json.dump(users, f)
-
+    save_users(users)
     init_user(username)
     
     return {"success": True, "message": f"User '{username}' registered successfully.", "username": username}
@@ -223,27 +225,20 @@ def register():
 @socketio.on('join')
 def handle_join(data):
     user_id = data.get('user_id')
-    if not user_id:
-        return
+    if not user_id: return
     
-    # User joins their own private room
     join_room(user_id)
-    print(f"Client joined room for user: {user_id}")
-    
     check_new_day(user_id)
     u_state = state[user_id]
     
     elapsed = get_current_elapsed_ms(user_id)
     emit('sw_time', {'elapsed_time': elapsed}, room=request.sid)
-    
-    # Send the live leaderboard to the newly joined user
     emit('leaderboard_update', get_leaderboard(), room=request.sid)
     
     stats = calculate_stats(user_id)
     today_str = datetime.now().strftime('%Y-%m-%d')
     today_sessions = [s for s in u_state['session_history'] if s.get('date') == today_str]
     
-    # Repopulate the Dashboard Timeline with ONLY today's sessions
     if today_sessions:
         for session in today_sessions:
             emit('session_logged', {
@@ -256,7 +251,6 @@ def handle_join(data):
                 'weeklyStats': stats['weeklyStats']
             }, room=request.sid)
     else:
-        # Initialize/reset the UI numbers
         emit('session_logged', {
             'type': u_state['current_session'].get('type', 'Ready'),
             'range': '', 
@@ -314,12 +308,12 @@ def handle_start_sw(data):
     if not u_state['is_running']:
         u_state['is_running'] = True
         u_state['last_start_time'] = time.time() * 1000
-        
         u_state['current_session'] = data
         save_state()
             
         socketio.emit('start_sw', u_state['current_session'], room=user_id)
         socketio.emit('sw_time', {'elapsed_time': get_current_elapsed_ms(user_id)}, room=user_id)
+        socketio.emit('leaderboard_update', get_leaderboard())
 
 @socketio.on('stop_sw')
 def handle_stop_sw(data):
@@ -350,7 +344,6 @@ def handle_stop_sw(data):
         save_state()
 
         socketio.emit('stop_sw', room=user_id)
-        
         stats = calculate_stats(user_id)
         
         socketio.emit('session_logged', {
@@ -363,7 +356,6 @@ def handle_stop_sw(data):
             'weeklyStats': stats['weeklyStats']
         }, room=user_id)
 
-        # Broadcast the global leaderboard change to EVERYONE connected!
         socketio.emit('leaderboard_update', get_leaderboard())
 
 @socketio.on('reset_sw')
@@ -384,13 +376,11 @@ def handle_reset_sw(data):
     socketio.emit('reset_sw', room=user_id)
     socketio.emit('sw_time', {'elapsed_time': 0}, room=user_id)
     socketio.emit('timer_tick', {'formattedTime': '00:00:00'}, room=user_id)
+    socketio.emit('leaderboard_update', get_leaderboard())
 
-# --- Background Master Clock ---
 def background_clock_sync():
-    """Iterate over all users and emit ticks to those currently running."""
     while True:
         socketio.sleep(1)
-        # Using list() to avoid dictionary changed size during iteration error
         for user_id in list(state.keys()):
             if state[user_id].get('is_running'):
                 current_ms = get_current_elapsed_ms(user_id)
@@ -400,5 +390,4 @@ if __name__ == '__main__':
     socketio.start_background_task(background_clock_sync)
     port = int(os.environ.get("PORT", 8080))
     print(f"🚀 FocusFlow Multi-User Backend running on http://127.0.0.1:{port}")
-    #socketio.run(app, host='0.0.0.0', port=8080, debug=False, allow_unsafe_werkzeug=True)
     socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
