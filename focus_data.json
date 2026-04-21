@@ -1,1 +1,14 @@
-{}
+{
+    "arjit": {
+        "accumulated_time_ms": 0,
+        "last_start_time": null,
+        "is_running": false,
+        "current_session": {
+            "type": "Ready",
+            "goal": "",
+            "startTime": ""
+        },
+        "session_history": [],
+        "current_date": "2026-04-21"
+    }
+}

@@ -57,6 +57,12 @@
             display: flex; justify-content: center; align-items: center;
             z-index: 1000;
         }
+        .registerOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px);
+            display: none; justify-content: center; align-items: center;
+            z-index: 1000;
+        }
         .login-box {
             background: var(--surface-solid); padding: 40px; border-radius: 24px; border: 1px solid var(--border);
             box-shadow: var(--shadow-lg); text-align: center; width: 100%; max-width: 400px;
@@ -65,6 +71,14 @@
         .login-box p { color: var(--text-muted); margin-bottom: 24px; }
         .login-box input { margin-bottom: 16px; text-align: center; font-size: 1.1rem; }
         .login-box button { width: 100%; }
+        .register-box {
+            background: var(--surface-solid); padding: 40px; border-radius: 24px; border: 1px solid var(--border);
+            box-shadow: var(--shadow-lg); text-align: center; width: 100%; max-width: 400px;
+        }
+        .register-box h2 { font-size: 1.8rem; margin-bottom: 8px; justify-content: center; }
+        .register-box p { color: var(--text-muted); margin-bottom: 24px; }
+        .register-box input { margin-bottom: 16px; text-align: center; font-size: 1.1rem; }
+        .register-box button { width: 100%; }
 
         /* Animations */
         @keyframes fadeInUp {
@@ -129,7 +143,7 @@
             min-height: 0; 
             opacity: 0; 
             animation: fadeInUp 0.6s ease-out forwards; 
-            animation-delay: 0.1s; 
+            animation-delay: 0.1s;
         }
 
         .card { 
@@ -328,10 +342,24 @@
     <div id="loginOverlay">
         <div class="login-box">
             <h2><i class="ph-duotone ph-user-circle" style="color: var(--primary); font-size: 2.5rem; margin-bottom: 10px;"></i><br>Welcome to FocusFlow</h2>
-            <p>Enter your username to access your personal dashboard.</p>
-            <input type="text" id="usernameInput" placeholder="E.g. Alex" onkeydown="if(event.key === 'Enter') loginUser()">
-            <button class="btn btn-start" onclick="loginUser()">Enter Dashboard</button>
+            <p>Enter your credentials to access your personal dashboard.</p>
+            <input type="text" id="usernameInput" placeholder="Username">
+            <input type="password" id="passwordInput" placeholder="Password" onkeypress="if(event.key === 'Enter') loginUser()">
+            <!--register area-->
+            <p>Don't have an account? <a href="#" onclick="showRegisterForm()">Register here</a></p>
+            <button class="btn btn-start" onclick="loginUser()">Login</button>
         </div>
+    </div>
+    <div class="registerOverlay">
+            <div class="register-box">
+                <h2><i class="ph-duotone ph-user-circle-plus" style="color: var(--primary); font-size: 2.5rem; margin-bottom: 10px;"></i><br>Create an Account</h2>
+                <p>Fill in the details to create your account.</p>
+                <input type="text" id="regUsernameInput" placeholder="Username">
+                <input type="password" id="regPasswordInput" placeholder="Password">
+                <input type="password" id="regConfirmPasswordInput" placeholder="Confirm Password" onkeydown="if(event.key == 'Enter') registerUser()">
+                <p>Already have an account? <a href="#" onclick="showLoginForm()">Login here</a></p>
+                <button class="btn btn-start" onclick="registerUser()">Register</button>
+            </div>
     </div>
 
     <header class="header">
@@ -342,7 +370,7 @@
         <div class="header-controls">
             <div id="currentDate">Wednesday, 25 October</div>
             <div class="user-badge" onclick="logoutUser()" title="Click to logout">
-                <i class="ph-bold ph-user"></i> <span id="displayUsername">User</span>
+                <i class="ph-bold ph-user"></i> <span id="displayUsername" style="text-transform: capitalize;">User</span>
             </div>
         </div>
     </header>
@@ -350,7 +378,6 @@
     <main class="dashboard">
         
         <!-- COLUMN 1 WRAPPER: Command Center + Leaderboard -->
-        <div class="col-1-wrapper">
             <!-- COMMAND CENTER -->
             <section class="card" style="height: auto;">
                 <h2><i class="ph-duotone ph-timer"></i> Timer Control</h2>
@@ -398,13 +425,6 @@
             </section>
             
             <!-- LEADERBOARD -->
-            <section class="card" style="flex-grow: 1;">
-                <h2><i class="ph-duotone ph-trophy"></i> Daily Leaderboard</h2>
-                <div class="stats-grid" id="leaderboardGrid">
-                    <div class="empty-state">No leaders today yet.</div>
-                </div>
-            </section>
-        </div>
 
         <!-- TODAY'S BREAKDOWN -->
         <section class="card">
@@ -415,6 +435,7 @@
         </section>
 
         <!-- HISTORICAL DATA BREAKDOWN -->
+        <div class="col-1-wrapper">
         <section class="card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                 <h2 style="margin: 0;"><i class="ph-duotone ph-calendar-blank"></i> History</h2>
@@ -433,6 +454,13 @@
             </div>
         </section>
 
+        <section class="card" style="flex-grow: 1;">
+            <h2><i class="ph-duotone ph-trophy"></i> Daily Leaderboard</h2>
+                <div class="stats-grid" id="leaderboardGrid">
+                    <div class="empty-state">No leaders today yet.</div>
+            </div>
+        </section>
+        </div>
         <!-- TIMELINE -->
         <section class="card">
             <h2><i class="ph-duotone ph-list-dashes"></i> Daily Timeline</h2>
@@ -447,6 +475,7 @@
     </main>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         const socket = io();
         let currentUser = localStorage.getItem('focus_user');
@@ -458,24 +487,77 @@
             document.getElementById('remoteClockLink').href = `/remote?user=${currentUser}`;
             socket.emit("join", { user_id: currentUser });
         }
-
         function loginUser() {
-            const input = document.getElementById('usernameInput').value.trim().toLowerCase();
-            if (input) {
-                localStorage.setItem('focus_user', input);
-                currentUser = input;
-                document.getElementById('loginOverlay').style.display = 'none';
-                document.getElementById('displayUsername').innerText = currentUser;
-                document.getElementById('remoteClockLink').href = `/remote?user=${currentUser}`;
-                socket.emit("join", { user_id: currentUser });
-            }
+            const uinput = document.getElementById('usernameInput').value.trim().toLowerCase();
+            const pinput = document.getElementById('passwordInput').value.trim();
+            $.ajax({
+                url: '/login',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ username: uinput, password: pinput }),
+                success: function(response) {
+                    if (response.success) {
+                        localStorage.setItem('focus_user', response.username);
+                        currentUser = response.username;
+                        document.getElementById('loginOverlay').style.display = 'none';
+                        document.getElementById('displayUsername').innerText = currentUser;
+                        document.getElementById('remoteClockLink').href = `/remote?user=${currentUser}`;
+                        socket.emit("join", { user_id: currentUser });
+                    } else {
+                        alert(response.message || 'Login failed. Please try again.');
+                    }
+                },
+                error: function() {
+                    alert('An error occurred while trying to log in. Please try again later.');
+                }
+            });
         }
 
         function logoutUser() {
             localStorage.removeItem('focus_user');
             location.reload();
         }
-
+        function showRegisterForm() {
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.querySelector('.registerOverlay').style.display = 'flex';
+        }
+        function showLoginForm() {
+            document.querySelector('.registerOverlay').style.display = 'none';
+            document.getElementById('loginOverlay').style.display = 'flex';
+        }
+        function registerUser() {
+            const uinput = document.getElementById('regUsernameInput').value.trim().toLowerCase();
+            const pinput = document.getElementById('regPasswordInput').value.trim();
+            const cpinput = document.getElementById('regConfirmPasswordInput').value.trim();
+            
+            if (pinput !== cpinput) {
+                alert('Passwords do not match. Please try again.');
+                return;
+            }
+            
+            $.ajax({
+                url: '/register',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ username: uinput, password: pinput }),
+                success: function(response) {
+                    if (response.success) {
+                        alert('Registration successful! You can now log in.');
+                        localStorage.setItem('focus_user', response.username);
+                        currentUser = response.username;
+                        document.getElementById('loginOverlay').style.display = 'none';
+                        document.getElementById('displayUsername').innerText = currentUser;
+                        document.getElementById('remoteClockLink').href = `/remote?user=${currentUser}`;
+                        socket.emit("join", { user_id: currentUser });
+                    } else {
+                        alert(response.message || 'Registration failed. Please try again.');
+                    }
+                },
+                error: function() {
+                    alert('An error occurred while trying to register. Please try again later.');
+                }
+            });
+        }
         // --- Populate History Dropdown ---
         const historySelect = document.getElementById('historyRangeSelect');
         for (let i = 1; i <= 7; i++) {

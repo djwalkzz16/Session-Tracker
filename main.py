@@ -11,6 +11,7 @@ app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 DB_FILE = 'focus_data.json'
+USER_FILE = 'users.json'
 
 # --- Database / State Management ---
 def load_state():
@@ -168,6 +169,55 @@ def home():
 @app.route("/remote")
 def remote():
     return render_template('remote.html')
+
+@app.route("/login", methods=['POST'])
+def login():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')  # For future use, currently not implemented
+    if not username:
+        return {"success": False, "message": "Username is required."}, 400
+    
+    if not password:
+        return {"success": False, "message": "Password is required."}, 400
+
+
+    with open(USER_FILE, 'r') as f:
+        users = json.load(f)
+    if username not in users:
+        return {"success": False, "message": "Username not found. Please register first."}, 400
+    else:
+        if password == users[username]:
+            init_user(username)
+            return {"success": True, "message": f"User '{username}' logged in successfully.", "username": username}
+        else:
+            return {"success": False, "message": "Invalid password."}, 400
+
+@app.route("/register", methods=['POST'])
+def register():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')  # For future use, currently not implemented
+
+    if not username:
+        return {"success": False, "message": "Username is required."}, 400
+
+    if not password:
+        return {"success": False, "message": "Password is required."}, 400
+
+    if username in state:
+        return {"success": False, "message": "Username already exists. Please choose another."}, 400
+
+    # Save the new user (in a real application, you would hash the password)
+    with open(USER_FILE, 'r') as f:
+        users = json.load(f)
+    users[username] = password
+    with open(USER_FILE, 'w') as f:
+        json.dump(users, f)
+
+    init_user(username)
+    
+    return {"success": True, "message": f"User '{username}' registered successfully.", "username": username}
 
 # --- Socket.IO Event Handlers ---
 @socketio.on('join')
@@ -348,7 +398,7 @@ def background_clock_sync():
 
 if __name__ == '__main__':
     socketio.start_background_task(background_clock_sync)
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8080))
     print(f"🚀 FocusFlow Multi-User Backend running on http://127.0.0.1:{port}")
     #socketio.run(app, host='0.0.0.0', port=8080, debug=False, allow_unsafe_werkzeug=True)
     socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
