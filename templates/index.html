@@ -310,4 +310,316 @@
             <div class="timeline-summary">
                 <span class="total-time-label">Total Time Today</span>
                 <span class="total-time-value" id="dailyTotalTime">00:00:00</span>
-  
+            </div>
+            <div class="timeline" id="timelineLog"></div>
+        </section>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        const socket = io();
+        let currentUser = localStorage.getItem('focus_user');
+
+        if (currentUser) {
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('displayUsername').innerText = currentUser;
+            document.getElementById('remoteClockLink').href = `/remote?user=${currentUser}`;
+            socket.emit("join", { user_id: currentUser });
+        }
+        
+        function loginUser() {
+            const uinput = document.getElementById('usernameInput').value.trim().toLowerCase();
+            const pinput = document.getElementById('passwordInput').value.trim();
+            $.ajax({
+                url: '/login',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ username: uinput, password: pinput }),
+                success: function(response) {
+                    if (response.success) {
+                        localStorage.setItem('focus_user', response.username);
+                        currentUser = response.username;
+                        document.getElementById('loginOverlay').style.display = 'none';
+                        document.getElementById('displayUsername').innerText = currentUser;
+                        document.getElementById('remoteClockLink').href = `/remote?user=${currentUser}`;
+                        socket.emit("join", { user_id: currentUser });
+                    } else {
+                        alert(response.message || 'Login failed. Please try again.');
+                    }
+                },
+                error: function(err) {
+                    if(err.responseJSON && err.responseJSON.message) {
+                        alert(err.responseJSON.message);
+                    } else {
+                        alert('An error occurred while trying to log in.');
+                    }
+                }
+            });
+        }
+
+        function logoutUser() {
+            localStorage.removeItem('focus_user');
+            location.reload();
+        }
+        function showRegisterForm() {
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.querySelector('.registerOverlay').style.display = 'flex';
+        }
+        function showLoginForm() {
+            document.querySelector('.registerOverlay').style.display = 'none';
+            document.getElementById('loginOverlay').style.display = 'flex';
+        }
+        function registerUser() {
+            const uinput = document.getElementById('regUsernameInput').value.trim().toLowerCase();
+            const pinput = document.getElementById('regPasswordInput').value.trim();
+            const cpinput = document.getElementById('regConfirmPasswordInput').value.trim();
+            
+            if (pinput !== cpinput) {
+                alert('Passwords do not match. Please try again.');
+                return;
+            }
+            
+            $.ajax({
+                url: '/register',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ username: uinput, password: pinput }),
+                success: function(response) {
+                    if (response.success) {
+                        alert('Registration successful! You can now log in.');
+                        localStorage.setItem('focus_user', response.username);
+                        currentUser = response.username;
+                        document.querySelector('.registerOverlay').style.display = 'none';
+                        document.getElementById('displayUsername').innerText = currentUser;
+                        document.getElementById('remoteClockLink').href = `/remote?user=${currentUser}`;
+                        socket.emit("join", { user_id: currentUser });
+                    } else {
+                        alert(response.message || 'Registration failed. Please try again.');
+                    }
+                },
+                error: function(err) {
+                    if(err.responseJSON && err.responseJSON.message) {
+                        alert(err.responseJSON.message);
+                    } else {
+                        alert('An error occurred while trying to register.');
+                    }
+                }
+            });
+        }
+
+        const historySelect = document.getElementById('historyRangeSelect');
+        for (let i = 1; i <= 7; i++) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const dateString = d.toISOString().split('T')[0];
+            const displayString = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            
+            const option = document.createElement('option');
+            option.value = dateString;
+            option.text = i === 1 ? 'Yesterday' : displayString;
+            historySelect.appendChild(option);
+        }
+
+        historySelect.addEventListener('change', function() {
+            const val = this.value;
+            if (val === '7days') {
+                document.getElementById('historyTotalLabel').innerText = 'Weekly Total';
+            } else {
+                const selectedText = this.options[this.selectedIndex].text;
+                document.getElementById('historyTotalLabel').innerText = selectedText + ' Total';
+            }
+            document.getElementById('historyStatsGrid').innerHTML = '<div class="empty-state">Fetching data...</div>';
+            socket.emit('request_history', { user_id: currentUser, range: val });
+        });
+        
+        const sessionTypeSelect = document.getElementById('sessionType');
+        const customInput = document.getElementById('customSessionInput');
+        sessionTypeSelect.addEventListener('change', function() {
+            if (this.value === 'custom') {
+                customInput.style.display = 'block';
+                customInput.focus();
+            } else {
+                customInput.style.display = 'none';
+            }
+        });
+
+        function updateClocks() {
+            const now = new Date();
+            document.getElementById('wallClock').innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+            document.getElementById('currentDate').innerText = now.toLocaleDateString(undefined, options);
+        }
+        setInterval(updateClocks, 1000);
+        updateClocks();
+
+        let stopwatchInterval;
+        let stopwatchTime = 0;
+        let localStartTime = 0;
+
+        function formatStopwatch(ms) {
+            const milliseconds = String(Math.floor(ms / 10) % 100).padStart(2, '0');
+            const seconds = String(Math.floor(ms / 1000) % 60).padStart(2, '0');
+            const minutes = String(Math.floor(ms / 60000) % 60).padStart(2, '0');
+            const hours = String(Math.floor(ms / 3600000)).padStart(2, '0');
+            
+            document.getElementById('sw-main').innerText = `${hours}:${minutes}:${seconds}`;
+            document.getElementById('sw-ms').innerText = `.${milliseconds}`;
+        }
+
+        function updateStopwatch() {
+            stopwatchTime = Date.now() - localStartTime;
+            formatStopwatch(stopwatchTime);
+        }
+
+        function setButtonState(isRunning) {
+            document.getElementById('startBtn').style.display = isRunning ? 'none' : 'flex';
+            document.getElementById('stopBtn').style.display = isRunning ? 'flex' : 'none';
+            document.getElementById('sessionType').disabled = isRunning;
+            document.getElementById('customSessionInput').disabled = isRunning;
+            document.getElementById('goalMinutes').disabled = isRunning;
+        }
+
+        document.getElementById('startBtn').addEventListener('click', function() {
+            if (!currentUser) return;
+            let session = sessionTypeSelect.value;
+            if (session === 'custom') { session = customInput.value.trim() || 'Custom Session'; }
+            const goal = document.getElementById('goalMinutes').value;
+            socket.emit('start_sw', {
+                user_id: currentUser, type: session, goal: goal,
+                startTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+        });
+
+        document.getElementById('stopBtn').addEventListener('click', () => socket.emit('stop_sw', { user_id: currentUser }));
+        document.getElementById('resetBtn').addEventListener('click', () => socket.emit('reset_sw', { user_id: currentUser }));
+
+        socket.on('start_sw', (data) => {
+            if (!stopwatchInterval) {
+                localStartTime = Date.now() - stopwatchTime;
+                stopwatchInterval = setInterval(updateStopwatch, 10);
+                setButtonState(true);
+            }
+        });
+
+        socket.on('stop_sw', () => {
+            if (stopwatchInterval) {
+                clearInterval(stopwatchInterval);
+                stopwatchInterval = null;
+            }
+            setButtonState(false);
+        });
+
+        socket.on('reset_sw', () => {
+            if (stopwatchInterval) {
+                clearInterval(stopwatchInterval);
+                stopwatchInterval = null;
+            }
+            stopwatchTime = 0;
+            formatStopwatch(0);
+            setButtonState(false);
+        });
+
+        socket.on("sw_time", (time) => {
+            stopwatchTime = time["elapsed_time"];
+            if (stopwatchInterval) { localStartTime = Date.now() - stopwatchTime; }
+            formatStopwatch(stopwatchTime);
+        });
+
+        socket.on('session_logged', (data) => {
+            if (data.range && data.range.trim() !== '') { addTimelineEntry(data); }
+            updateBreakdown(data.stats, 'statsGrid');
+            if (historySelect.value === '7days') {
+                updateBreakdown(data.weeklyStats, 'historyStatsGrid');
+                if (data.weeklyTotal) document.getElementById('historyTotalTime').innerText = data.weeklyTotal;
+            }
+            if (data.dailyTotal) document.getElementById('dailyTotalTime').innerText = data.dailyTotal;
+        });
+
+        socket.on('history_response', (data) => {
+            updateBreakdown(data.stats, 'historyStatsGrid');
+            document.getElementById('historyTotalTime').innerText = data.total || '00:00:00';
+        });
+        
+        socket.on('leaderboard_update', (data) => {
+            const grid = document.getElementById('leaderboardGrid');
+            grid.innerHTML = '';
+            
+            if (!data || data.length === 0) {
+                grid.innerHTML = '<div class="empty-state">No leaders today yet.</div>';
+                return;
+            }
+
+            data.forEach(user => {
+                const item = document.createElement('div');
+                item.className = 'stat-item';
+                item.style.padding = '12px 16px'; 
+                
+                let rankClass = 'rank';
+                if (user.rank === 1) rankClass += ' gold';
+                else if (user.rank === 2) rankClass += ' silver';
+                else if (user.rank === 3) rankClass += ' bronze';
+
+                let activeSessionHTML = '';
+                if (user.is_running) {
+                    activeSessionHTML = `<span style="font-size: 0.75rem; color: var(--success); font-weight: 600; display: flex; align-items: center; margin-top: 4px;">
+                        <span style="display: inline-block; width: 6px; height: 6px; background: var(--success); border-radius: 50%; margin-right: 6px; animation: pulse-dot 2s infinite;"></span>
+                        ${user.current_session}
+                    </span>`;
+                }
+
+                item.innerHTML = `
+                    <div class="stat-info" style="display:flex; align-items:center; gap: 12px; flex-direction:row;">
+                        <div class="${rankClass}">${user.rank}</div>
+                        <div style="display: flex; flex-direction: column;">
+                            <span class="type" style="font-size: 0.95rem; text-transform: capitalize;">${user.username}</span>
+                            ${activeSessionHTML}
+                        </div>
+                    </div>
+                    <div class="stat-value" style="font-size: 0.95rem;">${user.formatted_time}</div>
+                `;
+                grid.appendChild(item);
+            });
+        });
+
+        function addTimelineEntry(data) {
+            const container = document.getElementById('timelineLog');
+            const entry = document.createElement('div');
+            entry.className = 'timeline-item';
+            entry.style.animation = "fadeInUp 0.4s ease-out";
+            entry.innerHTML = `
+                <div class="timeline-header">
+                    <span class="timeline-time"><i class="ph ph-clock"></i> ${data.range}</span>
+                    <span class="timeline-duration">+${data.duration}</span>
+                </div>
+                <span class="timeline-title">${data.type}</span>
+            `;
+            container.prepend(entry);
+        }
+
+        function updateBreakdown(stats, gridId) {
+            const grid = document.getElementById(gridId);
+            if (!grid) return; 
+            grid.innerHTML = ''; 
+            
+            if (!stats || stats.length === 0) {
+                grid.innerHTML = '<div class="empty-state">No sessions recorded.</div>';
+                return;
+            }
+
+            stats.forEach(stat => {
+                const item = document.createElement('div');
+                item.className = 'stat-item';
+                item.innerHTML = `
+                    <div class="stat-info">
+                        <span class="type">${stat.type}</span>
+                        <span class="count">${stat.count} session${stat.count > 1 ? 's' : ''}</span>
+                    </div>
+                    <div class="stat-value">${stat.formatted_time}</div>
+                `;
+                grid.appendChild(item);
+            });
+        }
+    </script>
+</body>
+</html>
