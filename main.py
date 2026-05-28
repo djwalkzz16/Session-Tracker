@@ -2,8 +2,10 @@ import time
 import json
 import os
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, join_room, leave_room, emit
+import requests
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -15,7 +17,6 @@ USER_FILE = 'users.json'
 
 # --- Safe User DB Loading ---
 def load_users():
-    """Safely loads users.json or creates it if it doesn't exist."""
     if not os.path.exists(USER_FILE):
         with open(USER_FILE, 'w') as f:
             json.dump({}, f)
@@ -36,12 +37,9 @@ def load_state():
         try:
             with open(DB_FILE, 'r') as f:
                 loaded_state = json.load(f)
-                
-                # Safety feature: Pause all timers on server restart
                 for user_id, user_data in loaded_state.items():
                     user_data['is_running'] = False
                     user_data['last_start_time'] = None
-                        
                 return loaded_state
         except Exception as e:
             print(f"Error loading database: {e}")
@@ -55,9 +53,8 @@ def save_state():
     except Exception as e:
         print(f"Error saving to database: {e}")
 
-# Initialize global states
 state = load_state()
-load_users() # Ensure users file exists on startup
+load_users()
 
 def init_user(user_id):
     if user_id not in state:
@@ -71,13 +68,13 @@ def init_user(user_id):
                 'startTime': ''
             },
             'session_history': [],
-            'current_date': datetime.now().strftime('%Y-%m-%d')
+            'current_date': datetime.now(tz=ZoneInfo("Asia/Kolkata")).strftime('%Y-%m-%d')
         }
         save_state()
 
 def check_new_day(user_id):
     init_user(user_id)
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.now(tz=ZoneInfo("Asia/Kolkata")).strftime('%Y-%m-%d')
     if state[user_id].get('current_date') != today:
         state[user_id]['current_date'] = today
         save_state()
@@ -100,9 +97,8 @@ def format_time(ms):
 def calculate_stats(user_id):
     init_user(user_id)
     u_state = state[user_id]
-    today_str = datetime.now().strftime('%Y-%m-%d')
-    seven_days_ago = datetime.now() - timedelta(days=7)
-    seven_days_ago = seven_days_ago.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_str = datetime.now(tz=ZoneInfo("Asia/Kolkata")).strftime('%Y-%m-%d')
+    seven_days_ago_str = (datetime.now(tz=ZoneInfo("Asia/Kolkata")) - timedelta(days=7)).strftime('%Y-%m-%d')
     
     daily_ms = 0
     weekly_ms = 0
@@ -111,15 +107,11 @@ def calculate_stats(user_id):
 
     for session in u_state.get('session_history', []):
         session_date_str = session.get('date', today_str) 
-        try:
-            session_date = datetime.strptime(session_date_str, '%Y-%m-%d')
-        except ValueError:
-            session_date = datetime.now()
-            
         t = session['type']
         d_ms = session['duration_ms']
         
-        if session_date >= seven_days_ago:
+        # String comparison works perfectly for YYYY-MM-DD dates
+        if session_date_str >= seven_days_ago_str:
             weekly_ms += d_ms
             if t not in weekly_breakdown:
                 weekly_breakdown[t] = {'count': 0, 'total_ms': 0}
@@ -146,33 +138,82 @@ def calculate_stats(user_id):
         'weeklyStats': weekly_stats
     }
 
-def get_leaderboard():
-    today_str = datetime.now().strftime('%Y-%m-%d')
-    leaderboard = []
+def get_leaderboards():
+    today_str = datetime.now(tz=ZoneInfo("Asia/Kolkata")).strftime('%Y-%m-%d')
+    seven_days_ago_str = (datetime.now(tz=ZoneInfo("Asia/Kolkata")) - timedelta(days=7)).strftime('%Y-%m-%d')
+    
+    daily_lb = []
+    weekly_lb = []
     
     for user_id, u_state in state.items():
         daily_ms = 0
+        weekly_ms = 0
+        
         for session in u_state.get('session_history', []):
-            if session.get('date', today_str) == today_str:
+            session_date = session.get('date', today_str)
+            if session_date == today_str:
                 daily_ms += session.get('duration_ms', 0)
+            if session_date >= seven_days_ago_str:
+                weekly_ms += session.get('duration_ms', 0)
                 
         is_running = u_state.get('is_running', False)
+        current_session = u_state.get('current_session', {}).get('type', '') if is_running else ''
         
         if daily_ms > 0 or is_running:
-            leaderboard.append({
-                'username': user_id,
-                'total_ms': daily_ms,
-                'formatted_time': format_time(daily_ms),
-                'is_running': is_running,
-                'current_session': u_state.get('current_session', {}).get('type', '') if is_running else ''
+            daily_lb.append({
+                'username': user_id, 'total_ms': daily_ms, 'formatted_time': format_time(daily_ms),
+                'is_running': is_running, 'current_session': current_session
             })
             
-    leaderboard.sort(key=lambda x: x['total_ms'], reverse=True)
+        if weekly_ms > 0 or is_running:
+            weekly_lb.append({
+                'username': user_id, 'total_ms': weekly_ms, 'formatted_time': format_time(weekly_ms),
+                'is_running': is_running, 'current_session': current_session
+            })
+            
+    daily_lb.sort(key=lambda x: x['total_ms'], reverse=True)
+    weekly_lb.sort(key=lambda x: x['total_ms'], reverse=True)
     
-    for i, entry in enumerate(leaderboard):
-        entry['rank'] = i + 1
+    for i, entry in enumerate(daily_lb): entry['rank'] = i + 1
+    for i, entry in enumerate(weekly_lb): entry['rank'] = i + 1
         
-    return leaderboard[:10]
+    return {'daily': daily_lb[:10], 'weekly': weekly_lb[:10]}
+
+# --- End of Day WhatsApp Broadcast ---
+def send_msg(message, phone):
+    url = "https://wappsync.com/api/SendMessage"
+    payload = {
+        "chatId": f"+91{phone}",
+        "message": message
+    }
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer caf625afd590317ac9f023ca1442bd81764b903338c6e042ad9eeb5e9af0fdc5',
+    }
+    response = requests.post(url, json=payload, headers=headers)
+    print(f"WhatsApp sent to {phone}: {response.text}")
+    return "Done"
+
+def send_daily_whatsapp_summary():
+    lbs = get_leaderboards()
+    daily_lb = lbs['daily']
+    
+    msg = "🏆 *FocusFlow Daily Leaderboard* 🏆\n\n"
+    if not daily_lb:
+        msg += "No sessions recorded today.\n"
+    else:
+        for idx, entry in enumerate(daily_lb):
+            medal = "🥇" if idx == 0 else "🥈" if idx == 1 else "🥉" if idx == 2 else "🔹"
+            msg += f"{medal} {entry['username'].capitalize()}: {entry['formatted_time']}\n"
+            
+    msg += "\nKeep up the great work! 🔥"
+    
+    users = load_users()
+    for user, data in users.items():
+        if isinstance(data, dict):
+            phone = data.get('phone')
+            if phone:
+                send_msg(msg, str(phone))
 
 # --- Flask Routes ---
 @app.route('/')
@@ -196,7 +237,10 @@ def login():
     if username not in users:
         return {"success": False, "message": "Username not found. Please register first."}, 400
     
-    if password == users[username]:
+    # Handle old string format or new dictionary format
+    saved_pwd = users[username].get('pwd') if isinstance(users[username], dict) else users[username]
+    
+    if password == saved_pwd:
         init_user(username)
         return {"success": True, "message": f"User '{username}' logged in successfully.", "username": username}
     else:
@@ -207,6 +251,7 @@ def register():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
+    phone = data.get('phone')
 
     if not username: return {"success": False, "message": "Username is required."}, 400
     if not password: return {"success": False, "message": "Password is required."}, 400
@@ -215,7 +260,10 @@ def register():
     if username in users or username in state:
         return {"success": False, "message": "Username already exists. Please choose another."}, 400
 
-    users[username] = password
+    users[username] = {
+        "pwd": password,
+        "phone": int(phone) if phone else None
+    }
     save_users(users)
     init_user(username)
     
@@ -233,10 +281,10 @@ def handle_join(data):
     
     elapsed = get_current_elapsed_ms(user_id)
     emit('sw_time', {'elapsed_time': elapsed}, room=request.sid)
-    emit('leaderboard_update', get_leaderboard(), room=request.sid)
+    emit('leaderboard_update', get_leaderboards(), room=request.sid)
     
     stats = calculate_stats(user_id)
-    today_str = datetime.now().strftime('%Y-%m-%d')
+    today_str = datetime.now(tz=ZoneInfo("Asia/Kolkata")).strftime('%Y-%m-%d')
     today_sessions = [s for s in u_state['session_history'] if s.get('date') == today_str]
     
     if today_sessions:
@@ -270,7 +318,6 @@ def handle_request_history(data):
     if not user_id: return
     
     range_val = data.get('range')
-    
     if range_val == '7days':
         stats = calculate_stats(user_id)
         emit('history_response', {'total': stats['weeklyTotal'], 'stats': stats['weeklyStats']}, room=request.sid)
@@ -286,7 +333,6 @@ def handle_request_history(data):
             t = session['type']
             d_ms = session['duration_ms']
             total_ms += d_ms
-            
             if t not in breakdown:
                 breakdown[t] = {'count': 0, 'total_ms': 0}
             breakdown[t]['count'] += 1
@@ -294,7 +340,6 @@ def handle_request_history(data):
             
     stats_list = [{'type': k, 'count': v['count'], 'formatted_time': format_time(v['total_ms']), 'raw': v['total_ms']} for k, v in breakdown.items()]
     stats_list.sort(key=lambda x: x['raw'], reverse=True)
-    
     emit('history_response', {'total': format_time(total_ms), 'stats': stats_list}, room=request.sid)
 
 @socketio.on('start_sw')
@@ -313,7 +358,7 @@ def handle_start_sw(data):
             
         socketio.emit('start_sw', u_state['current_session'], room=user_id)
         socketio.emit('sw_time', {'elapsed_time': get_current_elapsed_ms(user_id)}, room=user_id)
-        socketio.emit('leaderboard_update', get_leaderboard())
+        socketio.emit('leaderboard_update', get_leaderboards())
 
 @socketio.on('stop_sw')
 def handle_stop_sw(data):
@@ -331,11 +376,11 @@ def handle_stop_sw(data):
         u_state['is_running'] = False
         u_state['last_start_time'] = None
         
-        end_time_str = datetime.now().strftime("%I:%M %p")
+        end_time_str = datetime.now(tz=ZoneInfo("Asia/Kolkata")).strftime("%I:%M %p")
         start_time_str = u_state['current_session'].get('startTime', 'Unknown')
         
         session_record = {
-            'date': datetime.now().strftime('%Y-%m-%d'),
+            'date': datetime.now(tz=ZoneInfo("Asia/Kolkata")).strftime('%Y-%m-%d'),
             'type': u_state['current_session'].get('type', 'Session'),
             'duration_ms': session_duration_ms,
             'range': f"{start_time_str} - {end_time_str}"
@@ -356,7 +401,7 @@ def handle_stop_sw(data):
             'weeklyStats': stats['weeklyStats']
         }, room=user_id)
 
-        socketio.emit('leaderboard_update', get_leaderboard())
+        socketio.emit('leaderboard_update', get_leaderboards())
 
 @socketio.on('reset_sw')
 def handle_reset_sw(data):
@@ -376,15 +421,28 @@ def handle_reset_sw(data):
     socketio.emit('reset_sw', room=user_id)
     socketio.emit('sw_time', {'elapsed_time': 0}, room=user_id)
     socketio.emit('timer_tick', {'formattedTime': '00:00:00'}, room=user_id)
-    socketio.emit('leaderboard_update', get_leaderboard())
+    socketio.emit('leaderboard_update', get_leaderboards())
 
 def background_clock_sync():
+    last_sent_date = None
     while True:
         socketio.sleep(1)
+        now = datetime.now(tz=ZoneInfo("Asia/Kolkata"))
+        current_time = now.strftime('%H:%M:%S')
+        current_date = now.strftime('%Y-%m-%d')
+        
         for user_id in list(state.keys()):
             if state[user_id].get('is_running'):
                 current_ms = get_current_elapsed_ms(user_id)
                 socketio.emit('timer_tick', {'formattedTime': format_time(current_ms)}, room=user_id)
+                
+        # Trigger EOD WhatsApp message at exactly 23:59:00 IST
+        if current_time == "23:59:00" and last_sent_date != current_date:
+            last_sent_date = current_date
+            try:
+                send_daily_whatsapp_summary()
+            except Exception as e:
+                print(f"Error sending WA summary: {e}")
 
 if __name__ == '__main__':
     socketio.start_background_task(background_clock_sync)
