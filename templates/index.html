@@ -44,13 +44,11 @@
             flex-direction: column;
         }
 
-        /* Generic Scrollbar Styles */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #52525b; }
 
-        /* Login & Register Modal */
         #loginOverlay, .registerOverlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px);
@@ -67,50 +65,22 @@
         .login-box input, .register-box input { margin-bottom: 16px; text-align: center; font-size: 1.1rem; }
         .login-box button, .register-box button { width: 100%; }
 
-        /* Animations */
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes pulse-dot {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(52, 211, 153, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
-        }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-dot { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(52, 211, 153, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); } }
 
-        .header {
-            max-width: 1560px; width: 100%; margin: 0 auto 32px;
-            display: flex; justify-content: space-between; align-items: center;
-            flex-shrink: 0; animation: fadeInUp 0.6s ease-out;
-        }
+        .header { max-width: 1560px; width: 100%; margin: 0 auto 32px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; animation: fadeInUp 0.6s ease-out; }
         .header-logo { display: flex; align-items: center; gap: 12px; }
         .header-logo i { font-size: 2rem; color: var(--primary); background: var(--primary-light); padding: 8px; border-radius: 12px; }
         .header h1 { font-size: 1.75rem; font-weight: 800; margin: 0; color: var(--text-main); letter-spacing: -0.5px; }
         .header-controls { display: flex; align-items: center; gap: 16px; }
         #currentDate { font-weight: 600; color: var(--text-muted); font-size: 0.95rem; }
-        
-        .user-badge {
-            background: var(--primary-light); color: var(--primary);
-            padding: 6px 12px; border-radius: 20px; font-weight: 700; font-size: 0.85rem;
-            display: flex; align-items: center; gap: 6px; cursor: pointer; border: 1px solid var(--border);
-        }
+        .user-badge { background: var(--primary-light); color: var(--primary); padding: 6px 12px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; cursor: pointer; border: 1px solid var(--border); }
         .user-badge:hover { background: rgba(129, 140, 248, 0.25); }
 
-        .dashboard {
-            display: grid; grid-template-columns: 340px 1fr 1fr 360px; gap: 24px;
-            max-width: 1560px; width: 100%; margin: 0 auto; flex-grow: 1; min-height: 0; align-items: stretch;
-        }
+        .dashboard { display: grid; grid-template-columns: 340px 1fr 1fr 360px; gap: 24px; max-width: 1560px; width: 100%; margin: 0 auto; flex-grow: 1; min-height: 0; align-items: stretch; }
 
-        .stack-wrapper { 
-            display: flex; flex-direction: column; gap: 24px; min-height: 0; opacity: 0; 
-            animation: fadeInUp 0.6s ease-out forwards; animation-delay: 0.2s; 
-        }
-
-        .card { 
-            background: var(--surface-blur); backdrop-filter: blur(16px); border-radius: 24px; 
-            padding: 24px; box-shadow: var(--shadow-md); border: 1px solid var(--border);
-            display: flex; flex-direction: column; height: 100%; overflow: hidden; opacity: 0; animation: fadeInUp 0.6s ease-out forwards;
-        }
+        .stack-wrapper { display: flex; flex-direction: column; gap: 24px; min-height: 0; opacity: 0; animation: fadeInUp 0.6s ease-out forwards; animation-delay: 0.2s; }
+        .card { background: var(--surface-blur); backdrop-filter: blur(16px); border-radius: 24px; padding: 24px; box-shadow: var(--shadow-md); border: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; overflow: hidden; opacity: 0; animation: fadeInUp 0.6s ease-out forwards; }
         
         .stack-wrapper .card { animation: none; opacity: 1; }
         .card:nth-child(1) { animation-delay: 0.1s; }
@@ -120,12 +90,7 @@
         h2 { font-size: 1.15rem; font-weight: 700; margin: 0 0 24px 0; display: flex; align-items: center; gap: 10px; color: var(--text-main); flex-shrink: 0; }
         h2 i { color: var(--primary); font-size: 1.4rem; }
 
-        /* Timer Control Area */
-        .timer-display {
-            background: linear-gradient(145deg, rgba(255,255,255,0.03), rgba(0,0,0,0.2)); padding: 40px 20px;
-            border-radius: 20px; text-align: center; margin-bottom: 24px; border: 1px solid var(--border);
-            box-shadow: inset 0 2px 20px rgba(0, 0, 0, 0.3); position: relative; overflow: hidden; flex-shrink: 0;
-        }
+        .timer-display { background: linear-gradient(145deg, rgba(255,255,255,0.03), rgba(0,0,0,0.2)); padding: 40px 20px; border-radius: 20px; text-align: center; margin-bottom: 24px; border: 1px solid var(--border); box-shadow: inset 0 2px 20px rgba(0, 0, 0, 0.3); position: relative; overflow: hidden; flex-shrink: 0; }
         .remote-link { position: absolute; top: 14px; right: 14px; color: var(--text-muted); font-size: 1.4rem; text-decoration: none; z-index: 10; }
         .remote-link:hover { color: var(--primary); transform: scale(1.1); }
         .current-time { font-size: 0.9rem; color: var(--text-muted); font-weight: 600; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }
@@ -139,6 +104,7 @@
         select:focus, input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
         select:disabled, input:disabled { background-color: rgba(255, 255, 255, 0.03); color: #52525b; cursor: not-allowed; border-color: transparent; box-shadow: none; }
         #historyRangeSelect { padding: 6px 12px; font-size: 0.85rem; width: auto; margin: 0; cursor: pointer; }
+        #leaderboardTypeSelect { padding: 6px 12px; font-size: 0.85rem; width: auto; margin: 0; cursor: pointer; }
         #customSessionInput { margin-top: 10px; border-style: dashed; display: none; }
 
         .btn-group { display: grid; grid-template-columns: 1fr 64px; gap: 12px; margin-top: auto; flex-shrink: 0; }
@@ -198,7 +164,7 @@
             <button class="btn btn-start" onclick="loginUser()">Login</button>
         </div>
     </div>
-
+    
     <!-- Register Overlay -->
     <div class="registerOverlay">
         <div class="register-box">
@@ -206,7 +172,8 @@
             <p>Fill in the details to create your account.</p>
             <input type="text" id="regUsernameInput" placeholder="Username">
             <input type="password" id="regPasswordInput" placeholder="Password">
-            <input type="password" id="regConfirmPasswordInput" placeholder="Confirm Password" onkeydown="if(event.key == 'Enter') registerUser()">
+            <input type="password" id="regConfirmPasswordInput" placeholder="Confirm Password">
+            <input type="number" id="regPhoneInput" placeholder="WhatsApp No. (e.g. 9876543210)" onkeydown="if(event.key == 'Enter') registerUser()">
             <p>Already have an account? <a href="#" style="color: var(--primary);" onclick="showLoginForm()">Login here</a></p>
             <button class="btn btn-start" onclick="registerUser()">Register</button>
         </div>
@@ -226,7 +193,6 @@
     </header>
 
     <main class="dashboard">
-        
         <!-- COMMAND CENTER (Col 1) -->
         <section class="card" style="height: auto;">
             <h2><i class="ph-duotone ph-timer"></i> Timer Control</h2>
@@ -276,7 +242,6 @@
 
         <!-- HISTORY & LEADERBOARD (Col 3 wrapper) -->
         <div class="stack-wrapper">
-            <!-- HISTORY -->
             <section class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                     <h2 style="margin: 0;"><i class="ph-duotone ph-calendar-blank"></i> History</h2>
@@ -295,9 +260,14 @@
                 </div>
             </section>
 
-            <!-- LEADERBOARD -->
             <section class="card" style="flex-grow: 1;">
-                <h2><i class="ph-duotone ph-trophy"></i> Daily Leaderboard</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h2 style="margin: 0;"><i class="ph-duotone ph-trophy"></i> Leaderboard</h2>
+                    <select id="leaderboardTypeSelect">
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                    </select>
+                </div>
                 <div class="stats-grid" id="leaderboardGrid">
                     <div class="empty-state">No leaders today yet.</div>
                 </div>
@@ -320,6 +290,7 @@
     <script>
         const socket = io();
         let currentUser = localStorage.getItem('focus_user');
+        let latestLeaderboards = { daily: [], weekly: [] };
 
         if (currentUser) {
             document.getElementById('loginOverlay').style.display = 'none';
@@ -362,18 +333,22 @@
             localStorage.removeItem('focus_user');
             location.reload();
         }
+
         function showRegisterForm() {
             document.getElementById('loginOverlay').style.display = 'none';
             document.querySelector('.registerOverlay').style.display = 'flex';
         }
+
         function showLoginForm() {
             document.querySelector('.registerOverlay').style.display = 'none';
             document.getElementById('loginOverlay').style.display = 'flex';
         }
+
         function registerUser() {
             const uinput = document.getElementById('regUsernameInput').value.trim().toLowerCase();
             const pinput = document.getElementById('regPasswordInput').value.trim();
             const cpinput = document.getElementById('regConfirmPasswordInput').value.trim();
+            const phoneinput = document.getElementById('regPhoneInput').value.trim();
             
             if (pinput !== cpinput) {
                 alert('Passwords do not match. Please try again.');
@@ -384,7 +359,7 @@
                 url: '/register',
                 method: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify({ username: uinput, password: pinput }),
+                data: JSON.stringify({ username: uinput, password: pinput, phone: phoneinput }),
                 success: function(response) {
                     if (response.success) {
                         alert('Registration successful! You can now log in.');
@@ -431,6 +406,10 @@
             }
             document.getElementById('historyStatsGrid').innerHTML = '<div class="empty-state">Fetching data...</div>';
             socket.emit('request_history', { user_id: currentUser, range: val });
+        });
+
+        document.getElementById('leaderboardTypeSelect').addEventListener('change', function() {
+            renderLeaderboard();
         });
         
         const sessionTypeSelect = document.getElementById('sessionType');
@@ -542,15 +521,23 @@
         });
         
         socket.on('leaderboard_update', (data) => {
+            latestLeaderboards = data;
+            renderLeaderboard();
+        });
+
+        function renderLeaderboard() {
             const grid = document.getElementById('leaderboardGrid');
+            const type = document.getElementById('leaderboardTypeSelect').value;
+            const dataToRender = latestLeaderboards[type] || [];
+
             grid.innerHTML = '';
             
-            if (!data || data.length === 0) {
-                grid.innerHTML = '<div class="empty-state">No leaders today yet.</div>';
+            if (dataToRender.length === 0) {
+                grid.innerHTML = `<div class="empty-state">No leaders ${type === 'daily' ? 'today' : 'this week'} yet.</div>`;
                 return;
             }
 
-            data.forEach(user => {
+            dataToRender.forEach(user => {
                 const item = document.createElement('div');
                 item.className = 'stat-item';
                 item.style.padding = '12px 16px'; 
@@ -580,7 +567,7 @@
                 `;
                 grid.appendChild(item);
             });
-        });
+        }
 
         function addTimelineEntry(data) {
             const container = document.getElementById('timelineLog');
